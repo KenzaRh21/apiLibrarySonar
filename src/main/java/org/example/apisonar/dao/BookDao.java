@@ -1,111 +1,118 @@
 package org.example.apisonar.dao;
 
-
 import org.example.apisonar.model.Book;
-
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Repository;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
+@Repository
 public class BookDao {
 
-    // PROBLÈME 1: Credentials en dur (vulnérabilité de sécurité)
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/library";
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "password123";
+    // (M4 Correction) Utilisation du Logger JUL (si Lombok n'est pas utilisé)
+    private static final Logger LOGGER = Logger.getLogger(BookDao.class.getName());
 
-    // PROBLÈME 2: Code dupliqué
-    public List<Book> getAllBooks() {
-        List<Book> books = new ArrayList<>();
-        Connection conn = null;
-        Statement stmt = null;
+    @Value("${spring.datasource.url}")
+    private String dbUrl;
 
-        try {
-            conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            stmt = conn.createStatement();
-            String sql = "SELECT * FROM books";
-            ResultSet rs = stmt.executeQuery(sql);
+    @Value("${spring.datasource.username}")
+    private String dbUser;
 
-            while(rs.next()) {
-                Book book = new Book();
-                book.title = rs.getString("title");
-                book.author = rs.getString("author");
-                book.isbn = rs.getString("isbn");
-                books.add(book);
-            }
-        } catch(SQLException e) {
-            // PROBLÈME 3: Utilisation de System.out au lieu d'un logger
-            System.out.println("Erreur: " + e.getMessage());
-            e.printStackTrace();
-        }
+    @Value("${spring.datasource.password}")
+    private String dbPassword;
 
-        return books;
+    /**
+     * (M5 Correction) Méthode helper pour gérer la connexion.
+     * En environnement Spring, on préfèrerait JdbcTemplate.
+     */
+    private Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(this.dbUrl, this.dbUser, this.dbPassword);
     }
 
-    // PROBLÈME 2 (suite): Code dupliqué - méthode quasi identique
-    public List<Book> getAllBooksDuplicate() {
-        List<Book> books = new ArrayList<>();
-        Connection conn = null;
-        Statement stmt = null;
-
-        try {
-            conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            stmt = conn.createStatement();
-            String sql = "SELECT * FROM books";
-            ResultSet rs = stmt.executeQuery(sql);
-
-            while(rs.next()) {
-                Book book = new Book();
-                book.title = rs.getString("title");
-                book.author = rs.getString("author");
-                book.isbn = rs.getString("isbn");
-                books.add(book);
-            }
-        } catch(SQLException e) {
-            System.out.println("Erreur: " + e.getMessage());
-        }
-
-        return books;
-    }
-
-    // PROBLÈME 4: SQL Injection
-    public Book getBookByTitle(String title) {
-        Book book = null;
-
-        try {
-            Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            Statement stmt = conn.createStatement();
-
-            // Concaténation de chaînes - vulnérable à SQL injection
-            String sql = "SELECT * FROM books WHERE title = '" + title + "'";
-            ResultSet rs = stmt.executeQuery(sql);
-
-            if(rs.next()) {
-                book = new Book();
-                book.title = rs.getString("title");
-                book.author = rs.getString("author");
-                book.isbn = rs.getString("isbn");
-            }
-        } catch(SQLException e) {
-            System.err.println("Erreur: " + e.getMessage());
-        }
-
+    /**
+     * Facteur de code: Mappe les colonnes du ResultSet à un objet Book.
+     */
+    private Book mapResultSetToBook(ResultSet rs) throws SQLException {
+        Book book = new Book();
+        book.setTitle(rs.getString("title"));
+        book.setAuthor(rs.getString("author"));
+        book.setIsbn(rs.getString("isbn"));
+        // (M6) Ajout des champs isAvailable et publicationDate pour la complétude du mapping
+        book.setIsAvailable(rs.getBoolean("is_available"));
+        book.setPublicationDate(rs.getDate("publication_date"));
         return book;
     }
 
-    // PROBLÈME 5: Ressources non fermées
-    public void addBook(Book book) {
-        try {
-            Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-            String sql = "INSERT INTO books (title, author, isbn) VALUES (?, ?, ?)";
-            PreparedStatement pstmt = conn.prepareStatement(sql);
-            pstmt.setString(1, book.title);
-            pstmt.setString(2, book.author);
-            pstmt.setString(3, book.isbn);
-            pstmt.executeUpdate();
-            // Pas de fermeture des ressources!
+    /**
+     * Récupère tous les livres de la base de données.
+     */
+    public List<Book> getAllBooks() {
+        List<Book> books = new ArrayList<>();
+        String sql = "SELECT title, author, isbn, is_available, publication_date FROM books"; // Sélectionner les colonnes spécifiques
+
+        // (M5 Correction) Utilisation du try-with-resources + méthode helper
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while(rs.next()) {
+                books.add(mapResultSetToBook(rs));
+            }
         } catch(SQLException e) {
-            System.out.println("Erreur d'ajout: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Erreur SQL lors de la récupération des livres", e);
+        }
+        return books;
+    }
+
+    /**
+     * Récupère un livre par son titre.
+     */
+    public Book getBookByTitle(String title) {
+        Book book = null;
+        String sql = "SELECT title, author, isbn, is_available, publication_date FROM books WHERE title = ?"; // Sélectionner les colonnes spécifiques
+
+        // (M5 Correction) Utilisation du try-with-resources + méthode helper
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, title);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if(rs.next()) {
+                    book = mapResultSetToBook(rs);
+                }
+            }
+        } catch(SQLException e) {
+            // (M7) Remplacement de la concaténation de chaînes dans le log (peut être considéré comme Code Smell/performance)
+            LOGGER.log(Level.SEVERE, "Erreur SQL lors de la recherche du livre: {0}", new Object[]{e.getMessage()});
+        }
+        return book;
+    }
+
+    /**
+     * Ajoute un livre à la base de données.
+     */
+    public void addBook(Book book) {
+        // (S4 Security Hotspot) Attention à ne jamais utiliser de variable dans la structure de la requête SQL (nom de table, nom de colonne)
+        String sql = "INSERT INTO books (title, author, isbn, is_available, publication_date) VALUES (?, ?, ?, ?, ?)";
+
+        // (M5 Correction) Utilisation du try-with-resources + méthode helper
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, book.getTitle());
+            pstmt.setString(2, book.getAuthor());
+            pstmt.setString(3, book.getIsbn());
+            pstmt.setBoolean(4, book.getIsAvailable());
+            // Ajout du champ publicationDate
+            pstmt.setDate(5, new java.sql.Date(book.getPublicationDate().getTime()));
+            pstmt.executeUpdate();
+
+        } catch(SQLException e) {
+            LOGGER.log(Level.SEVERE, "Erreur d'ajout du livre: {0}", new Object[]{e.getMessage()});
         }
     }
 }

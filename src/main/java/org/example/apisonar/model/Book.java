@@ -7,15 +7,11 @@ import java.util.Date;
  */
 public class Book {
 
-    // PROBLÈME 1: Champs publics (violation d'encapsulation)
-    public String title;
-    public String author;
-    public String isbn;
-    public boolean isAvailable;
-    public Date publicationDate;
-
-    // PROBLÈME 2: Variable non utilisée
-    private int unusedVariable = 0;
+    private String title;
+    private String author;
+    private String isbn;
+    private boolean isAvailable;
+    private Date publicationDate; // (M6) Laissez le champ, il est utilisé dans le DAO corrigé
 
     public Book() {}
 
@@ -24,17 +20,47 @@ public class Book {
         this.author = author;
         this.isbn = isbn;
         this.isAvailable = true;
+        this.publicationDate = new Date(); // Initialisation par défaut
     }
 
-    // PROBLÈME 3: Méthode récursive infinie
-    public void recursiveMethod() {
-        recursiveMethod();
+    public String getTitle() {
+        return title;
     }
 
-    // PROBLÈME 4: Méthode qui ne fait rien
-    public void emptyMethod() {
-
+    public void setTitle(String title) {
+        this.title = title;
     }
 
-    // Getters et setters manquants volontairement pour créer des problèmes
+    public String getAuthor() {
+        return author;
+    }
+
+    public void setAuthor(String author) {
+        this.author = author;
+    }
+
+    public String getIsbn() {
+        return isbn;
+    }
+
+    public void setIsbn(String isbn) {
+        this.isbn = isbn;
+    }
+
+    // (M10 Correction) Convention de nommage pour les booléens : isAvailable()
+    public boolean isAvailable() {
+        return isAvailable;
+    }
+
+    public void setIsAvailable(boolean isAvailable) {
+        this.isAvailable = isAvailable;
+    }
+
+    public Date getPublicationDate() {
+        return publicationDate;
+    }
+
+    public void setPublicationDate(Date publicationDate) {
+        this.publicationDate = publicationDate;
+    }
 }
